@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FTP Data Logger - Monitor Realtime</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    /* THEME: LIGHT (WARM CREAM / PAPER) */
+    :root {
+      --bg: #fbfbfa;
+      --surface: #ffffff;
+      --surface-alt: #fdfdfc;
+      --border: #e7e5e4;
+      --border-subtle: #f0eeeb;
+      --th-bg: #faf9f7;
+      --text: #1c1917;
+      --text-muted: #78716c;
+      --text-light: #a8a29e;
+      --btn-primary-bg: #1c1917;
+      --btn-primary-text: #ffffff;
+      --btn-primary-hover: #292524;
+      --btn-secondary-bg: #ffffff;
+      --btn-secondary-border: #d6d3d1;
+      --btn-secondary-hover: #f5f5f4;
+      --status-ok-bg: #edf3ec;
+      --status-ok-text: #275a34;
+      --status-ok-border: #cfe3d1;
+      --status-bad-bg: #fbeae8;
+      --status-bad-text: #7a271a;
+      --status-bad-border: #f3cecb;
+      --tag-bg: #f5f5f4;
+      --tag-border: #e7e5e4;
+      --tag-text: #44403c;
+      --highlight-color: #f3ede2;
+    }
+
+    /* THEME: DARK (WARM CHARCOAL / ZERO NEON) */
+    [data-theme="dark"] {
+      --bg: #121214;
+      --surface: #1a1a1d;
+      --surface-alt: #161619;
+      --border: #2e2e33;
+      --border-subtle: #242428;
+      --th-bg: #161619;
+      --text: #ececed;
+      --text-muted: #9b9a9e;
+      --text-light: #6e6d73;
+      --btn-primary-bg: #ececed;
+      --btn-primary-text: #121214;
+      --btn-primary-hover: #d8d8dc;
+      --btn-secondary-bg: #1a1a1d;
+      --btn-secondary-border: #38383e;
+      --btn-secondary-hover: #25252a;
+      --status-ok-bg: #18261b;
+      --status-ok-text: #7cb884;
+      --status-ok-border: #233b28;
+      --status-bad-bg: #2b1716;
+      --status-bad-text: #d9756c;
+      --status-bad-border: #442422;
+      --tag-bg: #242428;
+      --tag-border: #333338;
+      --tag-text: #d4d4d8;
+      --highlight-color: #2e2a22;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 32px 24px;
+      line-height: 1.5;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* HEADER */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 28px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      font-size: 1.375rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-radius: 9999px;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      background: var(--status-ok-bg);
+      color: var(--status-ok-text);
+      border: 1px solid var(--status-ok-border);
+      transition: all 0.2s ease;
+    }
+
+    .badge.offline {
+      background: var(--status-bad-bg);
+      color: var(--status-bad-text);
+      border-color: var(--status-bad-border);
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: currentColor;
+    }
+
+    /* STATS GRID */
+    .grid-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .card {
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+
+    .card-value {
+      font-size: 1.625rem;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+
+    /* CONTROL PANEL */
+    .control-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin-bottom: 28px;
+      gap: 16px;
+      flex-wrap: wrap;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .control-desc {
+      font-size: 0.875rem;
+      color: var(--text);
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .control-sub {
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+
+    .control-sub code {
+      font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 0.75rem;
+      background-color: var(--tag-bg);
+      color: var(--text);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      padding: 7px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background-color: var(--btn-primary-bg);
+      color: var(--btn-primary-text);
+      border: 1px solid var(--btn-primary-bg);
+    }
+
+    .btn-primary:hover {
+      background-color: var(--btn-primary-hover);
+    }
+
+    .btn-secondary {
+      background-color: var(--btn-secondary-bg);
+      color: var(--text);
+      border: 1px solid var(--btn-secondary-border);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--btn-secondary-hover);
+    }
+
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    /* TABLE SECTION */
+    .table-container {
+      background-color: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .table-header {
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: var(--surface-alt);
+    }
+
+    .table-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .table-title code {
+      font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 0.75rem;
+      font-weight: normal;
+      color: var(--text-muted);
+      background-color: var(--tag-bg);
+      padding: 2px 5px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.875rem;
+    }
+
+    th {
+      padding: 12px 22px;
+      background-color: var(--th-bg);
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 12px 22px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* Realtime arrival animation */
+    .row-highlight {
+      animation: warmFade 3.5s ease forwards;
+    }
+
+    @keyframes warmFade {
+      0% {
+        background-color: var(--highlight-color);
+      }
+      100% {
+        background-color: transparent;
+      }
+    }
+
+    .tag-channel {
+      background-color: var(--tag-bg);
+      color: var(--tag-text);
+      border: 1px solid var(--tag-border);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-weight: 500;
+    }
+
+    .time-mono {
+      font-family: "SF Mono", "Cascadia Code", Consolas, monospace;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+    }
+
+    .val-cell {
+      font-weight: 600;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .empty-state {
+      padding: 48px 24px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>FTP Data Logger &bull; Monitor Realtime</h1>
+        <div class="subtitle">Simulasi Ingestion Lokal &bull; Node.js &bull; PostgreSQL &bull; Socket.IO</div>
+      </div>
+      <div class="header-actions">
+        <!-- THEME TOGGLE BUTTON -->
+        <button id="theme-toggle" class="btn btn-secondary" onclick="toggleTheme()" title="Ganti Mode Terang / Gelap">
+          <svg id="theme-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+          <span id="theme-label">Mode Gelap</span>
+        </button>
+
+        <!-- SOCKET STATUS BADGE -->
+        <span id="socket-status" class="badge offline">
+          <span class="badge-dot"></span>
+          <span>Terputus</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- STATS BENTO -->
+    <div class="grid-stats">
+      <div class="card">
+        <div class="card-title">Total Baris Database</div>
+        <div id="stat-total-rows" class="card-value">-</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Event Baru (Sesi Ini)</div>
+        <div id="stat-live-events" class="card-value">0</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Logger Terdaftar</div>
+        <div id="stat-loggers" class="card-value">-</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Channel Aktif</div>
+        <div id="stat-channels" class="card-value">-</div>
+      </div>
+    </div>
+
+    <!-- CONTROL PANEL -->
+    <div class="control-panel">
+      <div>
+        <div class="control-desc">Simulasi File Masuk (Dropzone Lokal)</div>
+        <div class="control-sub">
+          File di folder <code>storage/ftp_simulator/incoming</code> otomatis diproses oleh watcher setiap 10 detik.
+        </div>
+      </div>
+      <div class="btn-group">
+        <button id="btn-fresh" class="btn btn-primary" onclick="triggerFreshSimulation()">
+          Generate File Baru (Data Segar)
+        </button>
+        <button id="btn-simulate" class="btn btn-secondary" onclick="triggerSimulation()">
+          Salin File Asli (.zrx)
+        </button>
+      </div>
+    </div>
+
+    <!-- REALTIME TABLE -->
+    <div class="table-container">
+      <div class="table-header">
+        <div class="table-title">
+          Live Stream Pengukuran <code>new_measurement</code>
+        </div>
+        <button class="btn btn-secondary" style="padding: 5px 12px; font-size: 0.75rem;" onclick="loadHistory()">
+          Muat Ulang Riwayat
+        </button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Waktu Diterima</th>
+            <th>ID Logger</th>
+            <th>Channel</th>
+            <th>Waktu Pengukuran (recorded_at)</th>
+            <th>Nilai (Value)</th>
+            <th>Satuan (Unit)</th>
+          </tr>
+        </thead>
+        <tbody id="measurement-body">
+          <tr id="empty-row">
+            <td colspan="6" class="empty-state">Menunggu event realtime dari server...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    /* ========================================================
+       THEME CONTROLLER (Light & Dark Mode)
+       ======================================================== */
+    function initTheme() {
+      const savedTheme = localStorage.getItem('app-theme');
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+      applyTheme(theme);
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('app-theme', theme);
+
+      const icon = document.getElementById('theme-icon');
+      const label = document.getElementById('theme-label');
+
+      if (theme === 'dark') {
+        // Icon Sun untuk beralih ke Mode Terang
+        icon.innerHTML = `
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y1="12"></line>
+          <line x1="21" y1="12" x2="23" y1="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        `;
+        label.textContent = 'Mode Terang';
+      } else {
+        // Icon Moon untuk beralih ke Mode Gelap
+        icon.innerHTML = `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>`;
+        label.textContent = 'Mode Gelap';
+      }
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      applyTheme(current === 'dark' ? 'light' : 'dark');
+    }
+
+    // Inisialisasi tema saat halaman pertama kali dimuat
+    initTheme();
+
+    /* ========================================================
+       SOCKET.IO & REALTIME MONITOR LOGIC
+       ======================================================== */
+    const socket = io();
+    const statusBadge = document.getElementById('socket-status');
+    const tableBody = document.getElementById('measurement-body');
+    const emptyRow = document.getElementById('empty-row');
+    const statLiveEvents = document.getElementById('stat-live-events');
+
+    let liveEventCount = 0;
+
+    socket.on('connect', () => {
+      statusBadge.className = 'badge';
+      statusBadge.innerHTML = '<span class="badge-dot"></span><span>Socket.IO Terhubung</span>';
+      fetchStats();
+      loadHistory();
+    });
+
+    socket.on('disconnect', () => {
+      statusBadge.className = 'badge offline';
+      statusBadge.innerHTML = '<span class="badge-dot"></span><span>Terputus</span>';
+    });
+
+    // Menerima Event Realtime dari Backend
+    socket.on('new_measurement', (data) => {
+      liveEventCount++;
+      statLiveEvents.textContent = liveEventCount;
+
+      if (emptyRow && emptyRow.parentNode) {
+        emptyRow.remove();
+      }
+
+      const tr = document.createElement('tr');
+      tr.className = 'row-highlight';
+
+      const now = new Date().toLocaleTimeString('id-ID');
+
+      tr.innerHTML = `
+        <td class="time-mono">${now}</td>
+        <td><strong>${escapeHtml(data.id_logger)}</strong></td>
+        <td><span class="tag-channel">${escapeHtml(data.channel)}</span></td>
+        <td class="time-mono">${escapeHtml(data.recorded_at)}</td>
+        <td class="val-cell">${data.value}</td>
+        <td>${escapeHtml(data.unit || '-')}</td>
+      `;
+
+      // Masukkan baris baru di paling atas tabel
+      tableBody.insertBefore(tr, tableBody.firstChild);
+
+      // Batasi maksimal 100 baris di tabel agar memori browser tetap ringan
+      if (tableBody.children.length > 100) {
+        tableBody.removeChild(tableBody.lastChild);
+      }
+
+      fetchStats();
+    });
+
+    async function fetchStats() {
+      try {
+        const res = await fetch('/api/stats');
+        const json = await res.json();
+        if (json.status === 'success') {
+          document.getElementById('stat-total-rows').textContent = Number(json.data.total_rows || 0).toLocaleString('id-ID');
+          document.getElementById('stat-loggers').textContent = json.data.total_loggers || 0;
+          document.getElementById('stat-channels').textContent = json.data.total_channels || 0;
+        }
+      } catch (e) {
+        console.error('Failed to fetch stats:', e);
+      }
+    }
+
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/measurements?limit=15');
+        const json = await res.json();
+        if (json.status === 'success' && json.data.length > 0) {
+          if (emptyRow && emptyRow.parentNode) emptyRow.remove();
+          tableBody.innerHTML = '';
+          json.data.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="time-mono" style="color: var(--text-light);">[Tersimpan]</td>
+              <td><strong>${escapeHtml(item.id_logger)}</strong></td>
+              <td><span class="tag-channel">${escapeHtml(item.channel)}</span></td>
+              <td class="time-mono">${formatDate(item.recorded_at)}</td>
+              <td class="val-cell">${item.value}</td>
+              <td>${escapeHtml(item.unit || '-')}</td>
+            `;
+            tableBody.appendChild(tr);
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load history:', e);
+      }
+    }
+
+    async function triggerFreshSimulation() {
+      const btn = document.getElementById('btn-fresh');
+      btn.disabled = true;
+      btn.textContent = 'Membuat file baru...';
+
+      try {
+        const res = await fetch('/api/simulate-fresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+          btn.textContent = 'File baru masuk! Menunggu cron 10s...';
+        } else {
+          btn.textContent = 'Gagal: ' + json.message;
+        }
+      } catch (err) {
+        btn.textContent = 'Error koneksi';
+      } finally {
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = 'Generate File Baru (Data Segar)';
+        }, 3500);
+      }
+    }
+
+    async function triggerSimulation() {
+      const btn = document.getElementById('btn-simulate');
+      btn.disabled = true;
+      btn.textContent = 'Menyalin file...';
+
+      try {
+        const res = await fetch('/api/simulate-drop', { method: 'POST' });
+        const json = await res.json();
+        if (json.status === 'success') {
+          btn.textContent = 'File disalin! Menunggu cron...';
+        } else {
+          btn.textContent = 'Gagal: ' + json.message;
+        }
+      } catch (err) {
+        btn.textContent = 'Error koneksi';
+      } finally {
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = 'Salin File Asli (.zrx)';
+        }, 3000);
+      }
+    }
+
+    function formatDate(str) {
+      if (!str) return '-';
+      const d = new Date(str);
+      return d.toISOString().replace('T', ' ').substring(0, 19);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+  </script>
+</body>
+</html>

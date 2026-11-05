@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Client raw data & storage files
+*.zrx
+storage/ftp_simulator/incoming/*
+!storage/ftp_simulator/incoming/.gitkeep
+storage/ftp_simulator/processed/*
+!storage/ftp_simulator/processed/.gitkeep
+storage/ftp_simulator/failed/*
+!storage/ftp_simulator/failed/.gitkeep
+data/
+downloads/
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
